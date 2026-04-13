@@ -3,8 +3,6 @@ from typing import Any
 
 import httpx
 
-DBT_CLOUD_BASE_URL = "https://cloud.getdbt.com/api/v3"
-
 
 class DbtError(Exception):
     def __init__(self, status_code: int, message: str) -> None:
@@ -16,6 +14,7 @@ class DbtClient:
     def __init__(self) -> None:
         token = os.environ.get("DBT_CLOUD_API_TOKEN", "")
         account_id = os.environ.get("DBT_CLOUD_ACCOUNT_ID", "")
+        base_url = os.environ.get("DBT_CLOUD_BASE_URL", "https://cloud.getdbt.com/api/v3").rstrip("/")
 
         if not token:
             raise RuntimeError("DBT_CLOUD_API_TOKEN environment variable is not set")
@@ -24,7 +23,7 @@ class DbtClient:
 
         self._account_id = account_id
         self._client = httpx.AsyncClient(
-            base_url=DBT_CLOUD_BASE_URL,
+            base_url=base_url,
             headers={"Authorization": f"Token {token}"},
             timeout=30.0,
         )
