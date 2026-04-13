@@ -14,6 +14,7 @@ ACCOUNT_ID = "123"
 def dbt_env(monkeypatch):
     monkeypatch.setenv("DBT_CLOUD_API_TOKEN", "test-token")
     monkeypatch.setenv("DBT_CLOUD_ACCOUNT_ID", ACCOUNT_ID)
+    monkeypatch.setenv("DBT_CLOUD_BASE_URL", BASE_URL)
 
 
 @pytest.fixture
@@ -195,3 +196,39 @@ def test_missing_account_id_raises(monkeypatch):
     monkeypatch.delenv("DBT_CLOUD_ACCOUNT_ID", raising=False)
     with pytest.raises(RuntimeError, match="DBT_CLOUD_ACCOUNT_ID"):
         DbtClient()
+
+
+# ---------------------------------------------------------------------------
+# Base URL configuration
+# ---------------------------------------------------------------------------
+
+@respx.mock
+async def test_uses_custom_base_url(monkeypatch):
+    custom_url = "https://abc123.us1.dbt.com/api/v3"
+    monkeypatch.setenv("DBT_CLOUD_API_TOKEN", "test-token")
+    monkeypatch.setenv("DBT_CLOUD_ACCOUNT_ID", ACCOUNT_ID)
+    monkeypatch.setenv("DBT_CLOUD_BASE_URL", custom_url)
+
+    client = DbtClient()
+
+    route = respx.get(custom_url + f"/accounts/{ACCOUNT_ID}/projects/").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+    await client.find_project_by_name("anything")
+    assert route.called
+
+
+@respx.mock
+async def test_default_base_url_when_not_set(monkeypatch):
+    monkeypatch.delenv("DBT_CLOUD_BASE_URL", raising=False)
+    monkeypatch.setenv("DBT_CLOUD_API_TOKEN", "test-token")
+    monkeypatch.setenv("DBT_CLOUD_ACCOUNT_ID", ACCOUNT_ID)
+
+    client = DbtClient()
+
+    default_url = "https://cloud.getdbt.com/api/v3"
+    route = respx.get(default_url + f"/accounts/{ACCOUNT_ID}/projects/").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+    await client.find_project_by_name("anything")
+    assert route.called
