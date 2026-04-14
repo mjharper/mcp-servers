@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "airflow-mcp-server"
 version = "0.1.0"
-description = "A lightweight MCP server wrapping the Apache Airflow REST API v1 (Airflow 2.x)"
+description = "A lightweight MCP server wrapping the Apache Airflow REST API v2"
 requires-python = ">=3.12"
 dependencies = [
     "mcp>=1.0.0",

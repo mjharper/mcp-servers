@@ -6,7 +6,7 @@ import respx
 
 from airflow_mcp_server.airflow_client import AirflowClient, AirflowError
 
-BASE_URL = "http://airflow.example.com/api/v1"
+BASE_URL = "http://airflow.example.com/api/v2"
 
 
 @pytest.fixture(autouse=True)
