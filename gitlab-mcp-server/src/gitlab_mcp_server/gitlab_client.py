@@ -52,6 +52,12 @@ class GitLabClient:
             raise GitLabError(response.status_code, response.text)
         return response.json()
 
+    async def _request_text(self, method: str, path: str, **kwargs: Any) -> str:
+        response = await self._client.request(method, path, **kwargs)
+        if not response.is_success:
+            raise GitLabError(response.status_code, response.text)
+        return response.text
+
     async def list_releases(self, project_id: str, per_page: int = 20) -> Any:
         return await self._request(
             "GET",
@@ -178,6 +184,53 @@ class GitLabClient:
             f"/projects/{project_id}/repository/branches",
             json={"branch": branch, "ref": ref},
         )
+
+    async def get_pipeline(self, project_id: str, pipeline_id: int) -> Any:
+        return await self._request(
+            "GET",
+            f"/projects/{project_id}/pipelines/{pipeline_id}",
+        )
+
+    async def list_pipelines(
+        self,
+        project_id: str,
+        ref: str | None = None,
+        sha: str | None = None,
+        status: str | None = None,
+        per_page: int = 20,
+    ) -> Any:
+        params: dict[str, Any] = {"per_page": per_page}
+        if ref is not None:
+            params["ref"] = ref
+        if sha is not None:
+            params["sha"] = sha
+        if status is not None:
+            params["status"] = status
+        return await self._request(
+            "GET",
+            f"/projects/{project_id}/pipelines",
+            params=params,
+        )
+
+    async def list_pipeline_jobs(self, project_id: str, pipeline_id: int) -> Any:
+        return await self._request(
+            "GET",
+            f"/projects/{project_id}/pipelines/{pipeline_id}/jobs",
+        )
+
+    async def get_job_log(
+        self, project_id: str, job_id: int, max_chars: int = 50000
+    ) -> str:
+        text = await self._request_text(
+            "GET",
+            f"/projects/{project_id}/jobs/{job_id}/trace",
+        )
+        if len(text) > max_chars:
+            text = (
+                f"[Log truncated — showing last {max_chars} of {len(text)} chars]\n"
+                + text[-max_chars:]
+            )
+        return text
 
     async def _get_all_pages(self, path: str, params: dict[str, Any]) -> list[Any]:
         """Fetch all pages of a GET endpoint, following Link: next headers."""

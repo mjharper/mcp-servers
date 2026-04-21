@@ -272,6 +272,111 @@ async def create_branch(
         return _fmt_error(e)
 
 
+@mcp.tool()
+async def get_pipeline(
+    project_id: str,
+    pipeline_id: int,
+    ctx: Context = None,  # type: ignore[assignment]
+) -> str:
+    """Get the status and details of a specific pipeline.
+
+    Args:
+        project_id: Numeric project ID or URL-encoded path (e.g. 'group%2Fproject').
+        pipeline_id: Numeric ID of the pipeline.
+
+    Returns:
+        JSON object with id, status, ref, sha, created_at, updated_at, duration,
+        and web_url.
+    """
+    try:
+        result = await _get_client(ctx).get_pipeline(project_id, pipeline_id)
+        return json.dumps(result, indent=2)
+    except GitLabError as e:
+        return _fmt_error(e)
+
+
+@mcp.tool()
+async def list_pipelines(
+    project_id: str,
+    ref: str | None = None,
+    sha: str | None = None,
+    status: str | None = None,
+    per_page: int = 20,
+    ctx: Context = None,  # type: ignore[assignment]
+) -> str:
+    """List pipelines for a project, optionally filtered by branch, commit SHA, or status.
+
+    To find pipelines triggered by a specific commit, pass the commit SHA returned
+    by push_files as the sha parameter.
+
+    Args:
+        project_id: Numeric project ID or URL-encoded path (e.g. 'group%2Fproject').
+        ref: Filter by branch or tag name.
+        sha: Filter by commit SHA (exact match).
+        status: Filter by status: created, pending, running, success, failed,
+            canceled, skipped, manual, scheduled.
+        per_page: Number of results to return (default 20).
+
+    Returns:
+        JSON array of pipeline objects.
+    """
+    try:
+        result = await _get_client(ctx).list_pipelines(
+            project_id, ref=ref, sha=sha, status=status, per_page=per_page
+        )
+        return json.dumps(result, indent=2)
+    except GitLabError as e:
+        return _fmt_error(e)
+
+
+@mcp.tool()
+async def list_pipeline_jobs(
+    project_id: str,
+    pipeline_id: int,
+    ctx: Context = None,  # type: ignore[assignment]
+) -> str:
+    """List all jobs in a pipeline.
+
+    Args:
+        project_id: Numeric project ID or URL-encoded path (e.g. 'group%2Fproject').
+        pipeline_id: Numeric ID of the pipeline.
+
+    Returns:
+        JSON array of job objects with id, name, stage, status, duration, and web_url.
+    """
+    try:
+        result = await _get_client(ctx).list_pipeline_jobs(project_id, pipeline_id)
+        return json.dumps(result, indent=2)
+    except GitLabError as e:
+        return _fmt_error(e)
+
+
+@mcp.tool()
+async def get_job_log(
+    project_id: str,
+    job_id: int,
+    max_chars: int = 50000,
+    ctx: Context = None,  # type: ignore[assignment]
+) -> str:
+    """Get the raw trace log for a CI job.
+
+    Logs can be very large. By default, the last 50,000 characters are returned
+    (errors appear at the end). A truncation notice is prepended if the log was cut.
+
+    Args:
+        project_id: Numeric project ID or URL-encoded path (e.g. 'group%2Fproject').
+        job_id: Numeric ID of the job.
+        max_chars: Maximum characters to return from the end of the log (default 50000).
+
+    Returns:
+        Plain text job log, possibly prefixed with a truncation notice.
+    """
+    try:
+        return await _get_client(ctx).get_job_log(project_id, job_id, max_chars)
+    except GitLabError as e:
+        return _fmt_error(e)
+
+
 def main() -> None:
     mcp.run(transport="stdio")
 

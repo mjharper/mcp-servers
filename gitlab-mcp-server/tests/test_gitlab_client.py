@@ -426,6 +426,117 @@ async def test_get_latest_release_returns_none_when_no_semver_tags(client):
     assert result is None
 
 
+# ---------------------------------------------------------------------------
+# Pipeline monitoring
+# ---------------------------------------------------------------------------
+
+@respx.mock
+async def test_request_text_returns_plain_text(client):
+    respx.get(_url("/projects/1/jobs/5/trace")).mock(
+        return_value=httpx.Response(200, text="Job log output\nline 2\n")
+    )
+    result = await client._request_text("GET", "/projects/1/jobs/5/trace")
+    assert result == "Job log output\nline 2\n"
+
+
+@respx.mock
+async def test_request_text_raises_on_error(client):
+    respx.get(_url("/projects/1/jobs/5/trace")).mock(
+        return_value=httpx.Response(403, text="Forbidden")
+    )
+    with pytest.raises(GitLabError) as exc_info:
+        await client._request_text("GET", "/projects/1/jobs/5/trace")
+    assert exc_info.value.status_code == 403
+
+
+@respx.mock
+async def test_get_pipeline_url_and_result(client):
+    route = respx.get(_url("/projects/1/pipelines/42")).mock(
+        return_value=httpx.Response(200, json={"id": 42, "status": "success"})
+    )
+    result = await client.get_pipeline("1", 42)
+    assert route.called
+    assert result["id"] == 42
+    assert result["status"] == "success"
+
+
+@respx.mock
+async def test_list_pipelines_no_filters(client):
+    route = respx.get(_url("/projects/1/pipelines")).mock(
+        return_value=httpx.Response(200, json=[{"id": 1}])
+    )
+    result = await client.list_pipelines("1")
+    params = route.calls[0].request.url.params
+    assert params["per_page"] == "20"
+    assert "ref" not in params
+    assert "sha" not in params
+    assert "status" not in params
+    assert result == [{"id": 1}]
+
+
+@respx.mock
+async def test_list_pipelines_with_sha(client):
+    route = respx.get(_url("/projects/1/pipelines")).mock(
+        return_value=httpx.Response(200, json=[{"id": 7}])
+    )
+    await client.list_pipelines("1", sha="abc123")
+    assert route.calls[0].request.url.params["sha"] == "abc123"
+
+
+@respx.mock
+async def test_list_pipelines_with_all_filters(client):
+    route = respx.get(_url("/projects/1/pipelines")).mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    await client.list_pipelines("1", ref="main", sha="deadbeef", status="failed", per_page=5)
+    params = route.calls[0].request.url.params
+    assert params["ref"] == "main"
+    assert params["sha"] == "deadbeef"
+    assert params["status"] == "failed"
+    assert params["per_page"] == "5"
+
+
+@respx.mock
+async def test_list_pipeline_jobs_url(client):
+    route = respx.get(_url("/projects/1/pipelines/42/jobs")).mock(
+        return_value=httpx.Response(200, json=[{"id": 10, "name": "build", "status": "failed"}])
+    )
+    result = await client.list_pipeline_jobs("1", 42)
+    assert route.called
+    assert result[0]["name"] == "build"
+
+
+@respx.mock
+async def test_get_job_log_no_truncation(client):
+    respx.get(_url("/projects/1/jobs/5/trace")).mock(
+        return_value=httpx.Response(200, text="short log")
+    )
+    result = await client.get_job_log("1", 5, max_chars=50000)
+    assert result == "short log"
+
+
+@respx.mock
+async def test_get_job_log_truncates_from_end(client):
+    long_log = "A" * 100 + "B" * 10
+    respx.get(_url("/projects/1/jobs/5/trace")).mock(
+        return_value=httpx.Response(200, text=long_log)
+    )
+    result = await client.get_job_log("1", 5, max_chars=10)
+    assert result.startswith("[Log truncated")
+    tail = result.split("\n", 1)[1]
+    assert tail == "B" * 10
+    assert "A" not in tail
+
+
+@respx.mock
+async def test_get_job_log_default_max_chars(client):
+    respx.get(_url("/projects/1/jobs/99/trace")).mock(
+        return_value=httpx.Response(200, text="ok")
+    )
+    result = await client.get_job_log("1", 99)
+    assert result == "ok"
+
+
 @respx.mock
 async def test_get_latest_release_follows_pagination(client):
     releases_url = _url("/projects/1/releases")
