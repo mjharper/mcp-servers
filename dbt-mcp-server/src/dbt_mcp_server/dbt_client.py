@@ -14,7 +14,7 @@ class DbtClient:
     def __init__(self) -> None:
         token = os.environ.get("DBT_CLOUD_API_TOKEN", "")
         account_id = os.environ.get("DBT_CLOUD_ACCOUNT_ID", "")
-        base_url = os.environ.get("DBT_CLOUD_BASE_URL", "https://cloud.getdbt.com/api/v3").rstrip("/")
+        base_url = os.environ.get("DBT_CLOUD_ADMIN_API_URL", "https://cloud.getdbt.com/api/v3").rstrip("/")
 
         if not token:
             raise RuntimeError("DBT_CLOUD_API_TOKEN environment variable is not set")
@@ -70,8 +70,8 @@ class DbtClient:
             "GET",
             f"/accounts/{self._account_id}/projects/{project_id}/environment-variables/environment/",
         )
-        env_vars = data.get("data", [])
-        return [ev["name"] for ev in env_vars if "name" in ev]
+        env_vars = data.get("data", {})
+        return list(env_vars.get("variables", {}).keys())
 
     async def list_jobs(self, project_id: str | None = None) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}

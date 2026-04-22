@@ -15,7 +15,7 @@ ACCOUNT_ID = "123"
 def dbt_env(monkeypatch):
     monkeypatch.setenv("DBT_CLOUD_API_TOKEN", "test-token")
     monkeypatch.setenv("DBT_CLOUD_ACCOUNT_ID", ACCOUNT_ID)
-    monkeypatch.setenv("DBT_CLOUD_BASE_URL", BASE_URL)
+    monkeypatch.setenv("DBT_CLOUD_ADMIN_API_URL", BASE_URL)
     monkeypatch.setenv("DBT_CLOUD_ADMIN_V2_URL", V2_BASE_URL)
 
 
@@ -150,7 +150,7 @@ async def test_find_project_by_name_only_returns_id_name_created_at(client):
 @respx.mock
 async def test_list_environment_variables_url(client):
     route = respx.get(_url(f"/accounts/{ACCOUNT_ID}/projects/42/environment-variables/environment/")).mock(
-        return_value=httpx.Response(200, json={"data": []})
+        return_value=httpx.Response(200, json={"data": {"variables": {}}})
     )
     await client.list_environment_variables("42")
     assert route.called
@@ -159,20 +159,20 @@ async def test_list_environment_variables_url(client):
 @respx.mock
 async def test_list_environment_variables_returns_names(client):
     respx.get(_url(f"/accounts/{ACCOUNT_ID}/projects/42/environment-variables/environment/")).mock(
-        return_value=httpx.Response(200, json={"data": [
-            {"name": "DBT_ENV_SECRET_KEY", "type": "secret"},
-            {"name": "DBT_DATASET", "type": "project"},
-            {"name": "DBT_TARGET", "type": "environment"},
-        ]})
+        return_value=httpx.Response(200, json={"data": {"variables": {
+            "DBT_ENV_SECRET_KEY": {"value": "secret"},
+            "DBT_DATASET": {"value": "my_dataset"},
+            "DBT_TARGET": {"value": "prod"},
+        }}})
     )
     result = await client.list_environment_variables("42")
-    assert result == ["DBT_ENV_SECRET_KEY", "DBT_DATASET", "DBT_TARGET"]
+    assert set(result) == {"DBT_ENV_SECRET_KEY", "DBT_DATASET", "DBT_TARGET"}
 
 
 @respx.mock
 async def test_list_environment_variables_empty(client):
     respx.get(_url(f"/accounts/{ACCOUNT_ID}/projects/1/environment-variables/environment/")).mock(
-        return_value=httpx.Response(200, json={"data": []})
+        return_value=httpx.Response(200, json={"data": {"variables": {}}})
     )
     result = await client.list_environment_variables("1")
     assert result == []
@@ -213,7 +213,7 @@ async def test_uses_custom_base_url(monkeypatch):
     custom_url = "https://abc123.us1.dbt.com/api/v3"
     monkeypatch.setenv("DBT_CLOUD_API_TOKEN", "test-token")
     monkeypatch.setenv("DBT_CLOUD_ACCOUNT_ID", ACCOUNT_ID)
-    monkeypatch.setenv("DBT_CLOUD_BASE_URL", custom_url)
+    monkeypatch.setenv("DBT_CLOUD_ADMIN_API_URL", custom_url)
 
     client = DbtClient()
 
@@ -226,7 +226,7 @@ async def test_uses_custom_base_url(monkeypatch):
 
 @respx.mock
 async def test_default_base_url_when_not_set(monkeypatch):
-    monkeypatch.delenv("DBT_CLOUD_BASE_URL", raising=False)
+    monkeypatch.delenv("DBT_CLOUD_ADMIN_API_URL", raising=False)
     monkeypatch.setenv("DBT_CLOUD_API_TOKEN", "test-token")
     monkeypatch.setenv("DBT_CLOUD_ACCOUNT_ID", ACCOUNT_ID)
 
