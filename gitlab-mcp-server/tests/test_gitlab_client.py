@@ -926,3 +926,118 @@ def test_shape_mr_handles_null_head_pipeline():
     }
     result = _shape_mr(mr)
     assert result["head_pipeline"] is None
+
+
+# ---------------------------------------------------------------------------
+# compare_branches
+# ---------------------------------------------------------------------------
+
+@respx.mock
+async def test_compare_branches_url_and_params(client):
+    route = respx.get(_url("/projects/1/repository/compare")).mock(
+        return_value=httpx.Response(200, json={
+            "commits": [], "diffs": [], "compare_timeout": False, "compare_same_ref": False,
+        })
+    )
+    await client.compare_branches("1", "main", "feature/x")
+    params = route.calls[0].request.url.params
+    assert params["from"] == "main"
+    assert params["to"] == "feature/x"
+    assert params["straight"] == "false"
+
+
+@respx.mock
+async def test_compare_branches_straight_param(client):
+    route = respx.get(_url("/projects/1/repository/compare")).mock(
+        return_value=httpx.Response(200, json={
+            "commits": [], "diffs": [], "compare_timeout": False,
+        })
+    )
+    await client.compare_branches("1", "main", "feature/x", straight=True)
+    assert route.calls[0].request.url.params["straight"] == "true"
+
+
+@respx.mock
+async def test_compare_branches_returns_commits_and_diffs(client):
+    payload = {
+        "commits": [
+            {"short_id": "abc1234", "title": "Add feature", "author_name": "Alice", "created_at": "2024-01-01T00:00:00Z"},
+        ],
+        "diffs": [
+            {"old_path": "a.py", "new_path": "a.py", "diff": "@@ -1 +1 @@\n-old\n+new", "too_large": False},
+        ],
+        "compare_timeout": False,
+        "compare_same_ref": False,
+    }
+    respx.get(_url("/projects/1/repository/compare")).mock(
+        return_value=httpx.Response(200, json=payload)
+    )
+    result = await client.compare_branches("1", "main", "feature/x")
+    assert result["commits"][0]["title"] == "Add feature"
+    assert result["diffs"][0]["new_path"] == "a.py"
+    assert result["compare_timeout"] is False
+
+
+@respx.mock
+async def test_compare_branches_compare_timeout(client):
+    respx.get(_url("/projects/1/repository/compare")).mock(
+        return_value=httpx.Response(200, json={
+            "commits": [], "diffs": [], "compare_timeout": True,
+        })
+    )
+    result = await client.compare_branches("1", "main", "feature/x")
+    assert result["compare_timeout"] is True
+
+
+@respx.mock
+async def test_compare_branches_encoded_project_id(client):
+    route = respx.get(_url("/projects/group%2Frepo/repository/compare")).mock(
+        return_value=httpx.Response(200, json={"commits": [], "diffs": [], "compare_timeout": False})
+    )
+    await client.compare_branches("group%2Frepo", "main", "feat")
+    assert route.called
+
+
+@respx.mock
+async def test_compare_branches_404_raises(client):
+    respx.get(_url("/projects/1/repository/compare")).mock(
+        return_value=httpx.Response(404, json={"message": "Not found"})
+    )
+    with pytest.raises(GitLabError) as exc_info:
+        await client.compare_branches("1", "main", "feature/x")
+    assert exc_info.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# _shape_commits (pure function — no HTTP)
+# ---------------------------------------------------------------------------
+
+def test_shape_commits_extracts_review_fields():
+    from gitlab_mcp_server.server import _shape_commits
+    commits = [
+        {
+            "id": "abc1234567890",
+            "short_id": "abc1234",
+            "title": "Add feature",
+            "message": "Add feature\n\nLong description here",
+            "author_name": "Alice",
+            "author_email": "alice@example.com",
+            "created_at": "2024-01-01T00:00:00Z",
+            "committer_name": "Alice",
+        }
+    ]
+    result = _shape_commits(commits)
+    assert len(result) == 1
+    assert result[0]["id"] == "abc1234"
+    assert result[0]["title"] == "Add feature"
+    assert result[0]["author_name"] == "Alice"
+    assert result[0]["created_at"] == "2024-01-01T00:00:00Z"
+    assert "author_email" not in result[0]
+    assert "message" not in result[0]
+
+
+def test_shape_commits_falls_back_to_full_id():
+    from gitlab_mcp_server.server import _shape_commits
+    commits = [{"id": "abcdef1234567890", "title": "T", "author_name": "A", "created_at": ""}]
+    result = _shape_commits(commits)
+    assert result[0]["id"] == "abcdef12"  # first 8 chars of full id
