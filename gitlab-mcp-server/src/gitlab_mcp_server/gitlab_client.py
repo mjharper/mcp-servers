@@ -328,5 +328,18 @@ class GitLabClient:
             params={},
         )
 
+    async def compare_branches(
+        self,
+        project_id: str,
+        from_ref: str,
+        to_ref: str,
+        straight: bool = False,
+    ) -> Any:
+        return await self._request(
+            "GET",
+            f"/projects/{project_id}/repository/compare",
+            params={"from": from_ref, "to": to_ref, "straight": straight},
+        )
+
     async def aclose(self) -> None:
         await self._client.aclose()

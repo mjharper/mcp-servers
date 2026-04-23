@@ -69,6 +69,18 @@ def _annotate_large_diffs(diffs: list[Any]) -> list[Any]:
     return diffs
 
 
+def _shape_commits(commits: list[Any]) -> list[Any]:
+    return [
+        {
+            "id": c.get("short_id") or c.get("id", "")[:8],
+            "title": c.get("title"),
+            "author_name": c.get("author_name"),
+            "created_at": c.get("created_at"),
+        }
+        for c in commits
+    ]
+
+
 @mcp.tool()
 async def list_releases(project_id: str, per_page: int = 20, ctx: Context = None) -> str:  # type: ignore[assignment]
     """List releases for a GitLab project.
@@ -598,6 +610,53 @@ async def get_failed_job_logs(
             project_id, pipeline_id, max_chars
         )
         return json.dumps(result, indent=2)
+    except GitLabError as e:
+        return _fmt_error(e)
+
+
+@mcp.tool()
+async def compare_branches(
+    project_id: str,
+    from_ref: str,
+    to_ref: str,
+    straight: bool = False,
+    ctx: Context = None,  # type: ignore[assignment]
+) -> str:
+    """Compare two branches or refs and return commits and file diffs.
+
+    Use this to review code on a branch before an MR is raised. Pass the
+    base branch as from_ref (e.g. 'main') and the feature branch as to_ref.
+    Returns the same diff format as get_mr_for_review so the same review
+    workflow applies. After reading the diffs, use get_file_contents with
+    ref=to_ref for deeper context on any file.
+
+    If compare_timeout is true the diff is incomplete — the branch is too
+    large for GitLab to compute a full diff. In that case inspect individual
+    files with get_file_contents or get_repository_tree.
+
+    Args:
+        project_id: Numeric project ID or URL-encoded path (e.g. 'group%2Fproject').
+        from_ref: Base ref to compare from (e.g. 'main').
+        to_ref: Branch or ref to compare to (the feature branch being reviewed).
+        straight: If True, use a linear diff (from..to). Default False uses a
+            three-dot diff based on the common merge-base, which is usually what
+            you want for branch review.
+
+    Returns:
+        JSON object with commits (slimmed), diffs (annotated), and compare_timeout.
+    """
+    try:
+        result = await _get_client(ctx).compare_branches(
+            project_id, from_ref, to_ref, straight
+        )
+        return json.dumps(
+            {
+                "compare_timeout": result.get("compare_timeout", False),
+                "commits": _shape_commits(result.get("commits", [])),
+                "diffs": _annotate_large_diffs(result.get("diffs", [])),
+            },
+            indent=2,
+        )
     except GitLabError as e:
         return _fmt_error(e)
 
