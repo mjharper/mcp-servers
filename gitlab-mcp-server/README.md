@@ -52,7 +52,7 @@ gitlab-mcp-server
 
 The server communicates over **stdio** only.
 
-## VS Code / Claude Code integration
+## VS Code integration
 
 ### `.vscode/mcp.json`
 
@@ -86,28 +86,6 @@ The server communicates over **stdio** only.
 ```
 
 The `${input:gitlabToken}` placeholder causes VS Code to prompt for the token once per session so it is never stored on disk.
-
-### Claude Code (`~/.claude/mcp.json` or project `.mcp.json`)
-
-```json
-{
-  "mcpServers": {
-    "gitlab": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/path/to/gitlab-mcp-server",
-        "run",
-        "gitlab-mcp-server"
-      ],
-      "env": {
-        "GITLAB_API_URL": "https://gitlab.example.com/api/v4",
-        "GITLAB_PERSONAL_ACCESS_TOKEN": "glpat-xxxx"
-      }
-    }
-  }
-}
-```
 
 ## Notes on `push_files`
 
