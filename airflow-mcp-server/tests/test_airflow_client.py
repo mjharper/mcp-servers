@@ -51,6 +51,52 @@ async def test_authenticate_raises_when_gcloud_fails():
 
 
 # ---------------------------------------------------------------------------
+# 401 token refresh and retry
+# ---------------------------------------------------------------------------
+
+@respx.mock
+async def test_401_triggers_token_refresh_and_retries(client):
+    route = respx.get(_url("/dags")).mock(
+        side_effect=[
+            httpx.Response(401, text="Unauthorized"),
+            httpx.Response(200, json={"dags": [], "total_entries": 0}),
+        ]
+    )
+    with patch("airflow_mcp_server.airflow_client._get_gcloud_token", return_value="new-token"):
+        await client.list_dags()
+    assert len(route.calls) == 2
+    assert client._client.headers["Authorization"] == "Bearer new-token"
+
+
+@respx.mock
+async def test_401_on_retry_raises_airflow_error(client):
+    respx.get(_url("/dags")).mock(
+        side_effect=[
+            httpx.Response(401, text="Unauthorized"),
+            httpx.Response(401, text="Unauthorized"),
+        ]
+    )
+    with patch("airflow_mcp_server.airflow_client._get_gcloud_token", return_value="new-token"):
+        with pytest.raises(AirflowError) as exc_info:
+            await client.list_dags()
+    assert exc_info.value.status_code == 401
+
+
+@respx.mock
+async def test_task_logs_401_triggers_token_refresh(client):
+    route = respx.get(_url("/dags/my_dag/dagRuns/run_1/taskInstances/my_task/logs/1")).mock(
+        side_effect=[
+            httpx.Response(401, text="Unauthorized"),
+            httpx.Response(200, text="log output"),
+        ]
+    )
+    with patch("airflow_mcp_server.airflow_client._get_gcloud_token", return_value="new-token"):
+        result = await client.get_task_logs("my_dag", "run_1", "my_task", 1)
+    assert result == "log output"
+    assert len(route.calls) == 2
+
+
+# ---------------------------------------------------------------------------
 # Bearer token forwarded on API requests
 # ---------------------------------------------------------------------------
 
