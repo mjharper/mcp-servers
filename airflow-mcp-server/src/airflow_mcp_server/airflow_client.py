@@ -1,8 +1,28 @@
 import asyncio
 import os
+import shutil
 from typing import Any
 
 import httpx
+
+_GCLOUD_SEARCH_PATH = ":".join([
+    os.path.expanduser("~/google-cloud-sdk/bin"),
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/opt/homebrew/bin",
+    "/snap/bin",
+])
+
+
+def _find_gcloud() -> str:
+    path = shutil.which("gcloud", path=_GCLOUD_SEARCH_PATH)
+    if not path:
+        raise RuntimeError(
+            "gcloud not found. Ensure the Google Cloud SDK is installed. "
+            f"Searched: {_GCLOUD_SEARCH_PATH}"
+        )
+    return path
 
 
 class AirflowError(Exception):
@@ -12,8 +32,12 @@ class AirflowError(Exception):
 
 
 async def _get_gcloud_token() -> str:
+    cmd = [_find_gcloud(), "auth", "print-access-token"]
+    account = os.environ.get("AIRFLOW_GCLOUD_ACCOUNT")
+    if account:
+        cmd += ["--account", account]
     proc = await asyncio.create_subprocess_exec(
-        "gcloud", "auth", "print-access-token",
+        *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
