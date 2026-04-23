@@ -69,7 +69,9 @@ The server communicates over **stdio** only.
       ],
       "env": {
         "DBT_CLOUD_API_TOKEN": "${input:dbtToken}",
-        "DBT_CLOUD_ACCOUNT_ID": "${input:dbtAccountId}"
+        "DBT_CLOUD_ACCOUNT_ID": "${input:dbtAccountId}",
+        "DBT_CLOUD_ADMIN_API_URL": "https://cloud.getdbt.com/api/v3",
+        "DBT_CLOUD_ADMIN_V2_URL": "https://cloud.getdbt.com/api/v2"
       }
     }
   },
