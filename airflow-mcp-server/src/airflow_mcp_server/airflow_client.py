@@ -53,7 +53,10 @@ async def _gcloud_login(gcloud: str, account: str | None) -> None:
 async def _get_gcloud_token() -> str:
     gcloud = _find_gcloud()
     account = os.environ.get("AIRFLOW_GCLOUD_ACCOUNT")
-    cmd = [gcloud, "auth", "print-access-token"]
+    # Cloud Composer's Airflow webserver is fronted by IAP, which requires a
+    # Google-signed ID token (JWT), not an OAuth 2.0 access token. Using
+    # print-access-token here yields 401 from IAP.
+    cmd = [gcloud, "auth", "print-identity-token"]
     if account:
         cmd += ["--account", account]
     proc = await asyncio.create_subprocess_exec(
@@ -65,7 +68,6 @@ async def _get_gcloud_token() -> str:
     if proc.returncode != 0:
         err = stderr.decode().strip()
         if "invalid_grant" in err or "Bad Request" in err or "does not have any valid credentials" in err:
-            # Credentials expired — trigger browser login and retry once
             await _gcloud_login(gcloud, account)
             proc2 = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -74,9 +76,9 @@ async def _get_gcloud_token() -> str:
             )
             stdout, stderr = await proc2.communicate()
             if proc2.returncode != 0:
-                raise RuntimeError(f"gcloud auth print-access-token failed after re-login: {stderr.decode().strip()}")
+                raise RuntimeError(f"gcloud auth print-identity-token failed after re-login: {stderr.decode().strip()}")
         else:
-            raise RuntimeError(f"gcloud auth print-access-token failed: {err}")
+            raise RuntimeError(f"gcloud auth print-identity-token failed: {err}")
     return stdout.decode().strip()
 
 
