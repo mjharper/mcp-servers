@@ -7,7 +7,7 @@ import respx
 
 from airflow_mcp_server.airflow_client import AirflowClient, AirflowError
 
-BASE_URL = "http://airflow.example.com/api/v2"
+BASE_URL = "http://airflow.example.com/api/v1"
 
 
 @pytest.fixture(autouse=True)
@@ -42,10 +42,10 @@ async def test_authenticate_uses_gcloud_token():
 async def test_authenticate_raises_when_gcloud_fails():
     with patch(
         "airflow_mcp_server.airflow_client._get_gcloud_token",
-        side_effect=RuntimeError("gcloud auth print-access-token failed: ERROR"),
+        side_effect=RuntimeError("gcloud auth print-identity-token failed: ERROR"),
     ):
         c = AirflowClient()
-        with pytest.raises(RuntimeError, match="gcloud auth print-access-token failed"):
+        with pytest.raises(RuntimeError, match="gcloud auth print-identity-token failed"):
             await c.authenticate()
         await c.aclose()
 

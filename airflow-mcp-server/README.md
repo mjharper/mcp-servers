@@ -19,7 +19,7 @@ A lightweight [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) s
 
 ## Authentication
 
-The server uses `gcloud auth print-access-token` to obtain a Bearer token at startup. This is the correct approach for Cloud Composer environments where IAP (Identity-Aware Proxy) is enabled — IAP rejects basic auth and redirects unauthenticated requests to Google login.
+The server uses `gcloud auth print-identity-token` to obtain a Google-signed ID token (JWT) at startup and sends it as a Bearer token. This is required for Cloud Composer, whose Airflow webserver is fronted by IAP (Identity-Aware Proxy). IAP rejects OAuth access tokens and basic auth with 401 — it only accepts ID tokens.
 
 Make sure you are authenticated before starting the server:
 
@@ -44,12 +44,12 @@ The server reads one environment variable at startup:
 
 | Variable | Description |
 |---|---|
-| `AIRFLOW_API_URL` | Base URL of the Airflow REST API, e.g. `https://airflow.example.com/api/v2` |
+| `AIRFLOW_API_URL` | Base URL of the Airflow REST API. Use `/api/v1` for Airflow 2.x (including Cloud Composer 2, e.g. Airflow 2.10.x), `/api/v2` for Airflow 3.x. |
 
 ## Running
 
 ```bash
-AIRFLOW_API_URL=https://airflow.example.com/api/v2 airflow-mcp-server
+AIRFLOW_API_URL=https://airflow.example.com/api/v1 airflow-mcp-server
 ```
 
 The server communicates over **stdio** only.
@@ -71,7 +71,7 @@ The server communicates over **stdio** only.
         "airflow-mcp-server"
       ],
       "env": {
-        "AIRFLOW_API_URL": "https://airflow.example.com/api/v2"
+        "AIRFLOW_API_URL": "https://airflow.example.com/api/v1"
       }
     }
   }
