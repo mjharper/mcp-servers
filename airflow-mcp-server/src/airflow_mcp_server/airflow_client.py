@@ -26,6 +26,7 @@ class AirflowClient:
         self._client = httpx.AsyncClient(
             base_url=base_url,
             timeout=30.0,
+            follow_redirects=True,
         )
 
     async def authenticate(self) -> None:
