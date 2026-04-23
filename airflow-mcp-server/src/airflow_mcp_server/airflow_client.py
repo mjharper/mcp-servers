@@ -31,9 +31,29 @@ class AirflowError(Exception):
         super().__init__(f"Airflow API error {status_code}: {message}")
 
 
+async def _gcloud_login(gcloud: str, account: str | None) -> None:
+    """Trigger browser-based gcloud auth login and wait for it to complete."""
+    cmd = [gcloud, "auth", "login", "--no-launch-browser", "--brief"]
+    if account:
+        cmd += ["--account", account]
+    # Re-run without --no-launch-browser so the browser opens automatically
+    cmd = [gcloud, "auth", "login", "--brief"]
+    if account:
+        cmd += ["--account", account]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(f"gcloud auth login failed: {stderr.decode().strip()}")
+
+
 async def _get_gcloud_token() -> str:
-    cmd = [_find_gcloud(), "auth", "print-access-token"]
+    gcloud = _find_gcloud()
     account = os.environ.get("AIRFLOW_GCLOUD_ACCOUNT")
+    cmd = [gcloud, "auth", "print-access-token"]
     if account:
         cmd += ["--account", account]
     proc = await asyncio.create_subprocess_exec(
@@ -43,7 +63,20 @@ async def _get_gcloud_token() -> str:
     )
     stdout, stderr = await proc.communicate()
     if proc.returncode != 0:
-        raise RuntimeError(f"gcloud auth print-access-token failed: {stderr.decode().strip()}")
+        err = stderr.decode().strip()
+        if "invalid_grant" in err or "Bad Request" in err or "does not have any valid credentials" in err:
+            # Credentials expired — trigger browser login and retry once
+            await _gcloud_login(gcloud, account)
+            proc2 = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc2.communicate()
+            if proc2.returncode != 0:
+                raise RuntimeError(f"gcloud auth print-access-token failed after re-login: {stderr.decode().strip()}")
+        else:
+            raise RuntimeError(f"gcloud auth print-access-token failed: {err}")
     return stdout.decode().strip()
 
 
