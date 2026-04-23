@@ -39,8 +39,15 @@ class AirflowClient:
         token = await _get_gcloud_token()
         self._client.headers["Authorization"] = f"Bearer {token}"
 
-    async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+    async def _do_request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         response = await self._client.request(method, path, **kwargs)
+        if response.status_code == 401:
+            await self.authenticate()
+            response = await self._client.request(method, path, **kwargs)
+        return response
+
+    async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        response = await self._do_request(method, path, **kwargs)
         if not response.is_success:
             raise AirflowError(response.status_code, response.text)
         return response.json()
@@ -79,8 +86,9 @@ class AirflowClient:
         return data.get("task_instances", [])
 
     async def get_task_logs(self, dag_id: str, dag_run_id: str, task_id: str, try_number: int) -> str:
-        response = await self._client.get(
-            f"/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/logs/{try_number}"
+        response = await self._do_request(
+            "GET",
+            f"/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/logs/{try_number}",
         )
         if not response.is_success:
             raise AirflowError(response.status_code, response.text)
